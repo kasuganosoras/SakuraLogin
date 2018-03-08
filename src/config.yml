@@ -1,0 +1,49 @@
+#
+#  SoraLogin 登录插件 v1.0
+#
+#  Powered by KasuganoSora
+#
+
+# Prefix 游戏内显示前缀
+prefix: "&c&l[&6&lKasugano &b&lSora&c&l] &r"
+
+# Color 提示信息字符串颜色
+color: "&e"
+
+# API URL 验证用户信息的 API 接口
+apiurl: "http://localhost/login/"
+
+# Connect Pass 连接 API 所使用的密码
+connectpass: "123456789"
+
+# Register 是否开启游戏内注册
+register: true
+
+# Remote 是否开启外置登录功能
+remote: true
+
+# Port 外置登录 Socket 服务器端口
+port: 6666
+
+# Message 语言消息设置
+message:
+    welcome: "欢迎回来，请直接在聊天栏中输入密码登录。"
+    account:
+        notexist: "您还没有注册账号，请访问我们的官网\n&b&lwww.kasuganosora.cn\n并注册您的游戏账号"
+        format: "您的用户名不合法，已被系统拦截"
+        disable: "您的账号已经被系统封禁或启用了保护模式"
+    servererr: "系统维护中，请稍后再进入"
+    errormax: "密码错误次数过多，请稍后重试"
+    logging: "正在登陆..."
+    login:
+        success: "账号登录成功！"
+        error: "密码错误，请重试。"
+        needpass: "请直接在聊天栏中输入密码登录。"
+        notlogin: "您还没有登录。"
+    register:
+        regmsg: "请直接在聊天栏中输入密码注册。"
+        success: "账号注册成功！"
+        error: "无法完成账号创建，请联系管理员。"
+    launcher:
+        error: "您未通过官方启动器启动游戏。"
+    error: "服务器发生内部错误：%s"
