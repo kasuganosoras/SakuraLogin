@@ -1,11 +1,7 @@
-/*
- * 版权所有(C)Niconico Craft 保留所有权利
- * 您不得在未经作者许可的情况下，擅自发布本软件的任何部分或全部内容
- * 否则将会追究二次发布者的法律责任
- */
 package com.moemc.login;
 
 import static com.moemc.login.Main.accountStatus;
+import static com.moemc.login.Main.aesKey;
 import static com.moemc.login.Main.apiPass;
 import static com.moemc.login.Main.color_decode;
 import static com.moemc.login.Main.loginAPI;
@@ -58,6 +54,7 @@ public class SocketServer {
                     sb.append(temp);
                 }
                 String brind = sb.toString();
+                brind = AES.decrypt(aesKey, brind);
                 String[] msgtag = brind.split("/");
                 if (msgtag.length > 1) {
                     if (getServer().getPlayer(msgtag[0]) != null) {

@@ -1,8 +1,3 @@
-/*
- * °æÈ¨ËùÓĞ(C)Niconico Craft ±£ÁôËùÓĞÈ¨Àû
- * Äú²»µÃÔÚÎ´¾­×÷ÕßĞí¿ÉµÄÇé¿öÏÂ£¬ÉÃ×Ô·¢²¼±¾Èí¼şµÄÈÎºÎ²¿·Ö»òÈ«²¿ÄÚÈİ
- * ·ñÔò½«»á×·¾¿¶ş´Î·¢²¼ÕßµÄ·¨ÂÉÔğÈÎ
- */
 package com.moemc.login;
 
 import java.io.File;
@@ -12,6 +7,8 @@ import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
 import org.bukkit.Location;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -30,77 +27,200 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
 
 /**
  *
  * @author KasuganoSora
  */
 public class Main extends JavaPlugin implements Listener {
-    
+
     public static Map<String, Boolean> loginStatus = new HashMap<String, Boolean>();
     public static Map<String, String> accountStatus = new HashMap<String, String>();
     public static FileConfiguration pluginConfig;
-    public static String prefix, textColor, loginAPI, apiPass;
+    public static String prefix, textColor, loginAPI, apiPass, aesKey;
     public static int configPort;
-    
+    public static Boolean socketStatus = true;
+    public static ServerSocket server;
+    public static String GlobalVersion = "1.1";
+
     @Override
     public void onEnable() {
-        getLogger().info("Sakura Login plugin enabled!");
-        getLogger().info("Author: KasuganoSora");
+        getLogger().info("Â§6Â§lSakura Â§bÂ§lLogin Â§eplugin enabled!");
+        getLogger().info("Â§aAuthor: Â§dKasuganoSora");
+        checkUpdate();
+        startSakuraLogin();
+    }
+
+    public void startSakuraLogin() {
         File file = new File(getDataFolder(), "config.yml");
         if (!getDataFolder().exists()) {
             getDataFolder().mkdir();
-            getLogger().info("Plugin config folder not exist, trying create it...");
+            getLogger().info("Â§ePlugin config folder not exist, trying create it...");
         }
         if (!file.exists()) {
             this.saveDefaultConfig();
-            getLogger().info("Successful save default config.");
+            getLogger().info("Â§aSuccessful save default config.");
             this.reloadConfig();
-            getLogger().info("Successful load new config.");
+            getLogger().info("Â§aSuccessful load new config.");
         }
         try {
             pluginConfig = this.load(file);
             getServer().getPluginManager().registerEvents(this, this);
-            getLogger().info("Events register successful!");
-            prefix = pluginConfig.getString("prefix").replaceAll("&", "¡ì");
-            textColor = pluginConfig.getString("color").replaceAll("&", "¡ì");
+            getLogger().info("Â§aEvents register successful!");
+            prefix = pluginConfig.getString("prefix").replaceAll("&", "Â§");
+            textColor = pluginConfig.getString("color").replaceAll("&", "Â§");
             configPort = pluginConfig.getInt("port");
             loginAPI = cfgString("apiurl");
             apiPass = cfgString("connectpass");
-            getLogger().info("Config file load successful.");
+            aesKey = cfgString("aeskey");
+            // å¯¹æ—§ç‰ˆæœ¬é…ç½®æ–‡ä»¶åšå…¼å®¹
+            oldConfig();
+            getLogger().info("Â§aConfig file load successful.");
         } catch (Exception ex) {
-            getLogger().info("An internal error when load this plugin, error: " + ex.getLocalizedMessage());
+            getLogger().info("Â§cAn internal error when load this plugin, error: " + ex.getLocalizedMessage());
         }
         if (cfgBoolean("remote")) {
             try {
                 new Thread() {
                     @Override
                     public void run() {
-                        getLogger().info("Starting remote login api...");
-                        getLogger().info("Socket bind on port: " + configPort);
+                        getLogger().info("Â§eStarting remote login api...");
+                        getLogger().info("Â§aSocket bind on port: " + configPort);
                         try {
                             int port = configPort;
-                            ServerSocket server = new ServerSocket(port);
-                            getLogger().info("Successful start remote login api.");
-                            while (true) {
+                            server = new ServerSocket(port);
+                            getLogger().info("Â§bSuccessful enable remote login api.");
+                            while (socketStatus) {
                                 Socket socket = server.accept();
                                 new Thread(new SocketServer.Task(socket)).start();
                             }
                         } catch (IOException ex) {
-                            getLogger().info("An internal error when starting remote login api, error: " + ex.getLocalizedMessage());
+                            if (!ex.getLocalizedMessage().equals("socket closed")) {
+                                getLogger().info("Â§cAn internal error when enable remote login api, error: " + ex.getLocalizedMessage());
+                            }
                         }
                     }
                 }.start();
             } catch (Exception er) {
-                getLogger().info("Failed to start remote login api, error: " + er.getLocalizedMessage());
+                getLogger().info("Â§cFailed to enable remote login api, error: " + er.getLocalizedMessage());
             }
         } else {
-            getLogger().info("Remote login api disabled, now the player only can login in game.");
+            getLogger().info("Â§cRemote login api disabled, now the player only can login in game.");
         }
     }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("slogin")) {
+            try {
+                switch (args[0].toLowerCase()) {
+                    case "reload":
+                        reloadloginConfig();
+                        break;
+                    case "help":
+                        pluginHelp(sender);
+                        break;
+                    case "stopsocket":
+                        disableSocket();
+                        break;
+                    case "startsocket":
+                        startSocket();
+                        break;
+                    default:
+                        pluginHelp(sender);
+                }
+            } catch (Exception ex) {
+                pluginHelp(sender);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    public void oldConfig() {
+        if (cfgString("aeskey").equals("")) {
+            try {
+                pluginConfig.set("aeskey", "KASUGANOSORASAES");
+                pluginConfig.save(new File(getDataFolder(), "config.yml"));
+                aesKey = "KASUGANOSORASAES";
+            } catch (IOException ex) {
+                getLogger().info(ex.getLocalizedMessage());
+            }
+        }
+    }
+
+    public void reloadloginConfig() {
+        try {
+            socketStatus = false;
+            server.close();
+            startSakuraLogin();
+        } catch (IOException ex) {
+            getLogger().info("Â§cAn internal error when close socket: " + ex.getLocalizedMessage());
+        }
+    }
+
+    public void disableSocket() {
+        try {
+            socketStatus = false;
+            pluginConfig.set("remote", false);
+            pluginConfig.save(new File(getDataFolder(), "config.yml"));
+            server.close();
+            getLogger().info("Â§bSuccessful disable remote login api.");
+        } catch (IOException ex) {
+            // getLogger().info("Â§cAn internal error when close socket: " + ex.getLocalizedMessage());
+        }
+    }
+
+    public void startSocket() {
+        try {
+            pluginConfig.set("remote", true);
+            pluginConfig.save(new File(getDataFolder(), "config.yml"));
+            new Thread() {
+                @Override
+                public void run() {
+                    getLogger().info("Â§eStarting remote login api...");
+                    getLogger().info("Â§aSocket bind on port: " + configPort);
+                    try {
+                        int port = configPort;
+                        server = new ServerSocket(port);
+                        getLogger().info("Â§bSuccessful enable remote login api.");
+                        while (socketStatus) {
+                            Socket socket = server.accept();
+                            new Thread(new SocketServer.Task(socket)).start();
+                        }
+                    } catch (IOException ex) {
+                        getLogger().info("Â§cAn internal error when enable remote login api, error: " + ex.getLocalizedMessage());
+                    }
+                }
+            }.start();
+        } catch (Exception er) {
+            getLogger().info("Â§cFailed to start remote login api, error: " + er.getLocalizedMessage());
+        }
+    }
+
+    public void pluginHelp(CommandSender sender) {
+        sender.sendMessage("Â§6Â§lSakura Â§bÂ§lLogin Â§aÂ§l1.1 Â§eÂ§lby Â§dÂ§lKasuganoSora");
+        sender.sendMessage(prefix + textColor + "/slogin help         Show this help.");
+        sender.sendMessage(prefix + textColor + "/slogin reload       Reload config.");
+        sender.sendMessage(prefix + textColor + "/slogin stopsocket   Disable remote login.");
+        sender.sendMessage(prefix + textColor + "/slogin startsocket  Enable remote login.");
+    }
     
+    public void checkUpdate() {
+        new Thread() {
+            @Override
+            public void run() {
+                String result = Http.LoadHTTP("https://panel.tcotp.cn/cdn/SakuraLogin/update.php?version=1.1", "");
+                if(result.equals(GlobalVersion)) {
+                    getLogger().info("Â§6Â§lSakura Â§bÂ§lLogin Â§aÂ§l" + GlobalVersion + " Â§eÂ§lis the newest version.");
+                } else {
+                    getLogger().info("Â§6Â§lSakura Â§bÂ§lLogin Â§aÂ§lfound new version: " + result);
+                    getLogger().info("Â§bDownload plugin here: Â§dhttp://www.mcbbs.net/thread-786033-1-1.html");
+                }
+            }
+        }.start();
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
@@ -129,7 +249,7 @@ public class Main extends JavaPlugin implements Listener {
                 player.kickPlayer(textColor + cfgString("message.servererr"));
         }
     }
-    
+
     @EventHandler
     public void onPlayerChatEvent(PlayerChatEvent event) {
         Player player = event.getPlayer();
@@ -169,13 +289,13 @@ public class Main extends JavaPlugin implements Listener {
                                 player.kickPlayer(textColor + cfgString("message.error").replace("%s", returnCode));
                         }
                     } catch (IllegalStateException | NullPointerException ex) {
-                        // ÎÒÒ²²»ÖªµÀÊ²Ã´¹íÎÊÌâ
+                        // æˆ‘ä¹Ÿä¸çŸ¥é“ä»€ä¹ˆé¬¼é—®é¢˜
                     }
                 }
             }.start();
         }
     }
-    
+
     @EventHandler
     public void onPlayerQuitEvent(PlayerQuitEvent event) {
         Player player = event.getPlayer();
@@ -183,13 +303,13 @@ public class Main extends JavaPlugin implements Listener {
             loginStatus.replace(player.getUniqueId().toString(), false);
         }
     }
-    
+
     @EventHandler
     public void onPlayerKickEvent(PlayerKickEvent event) {
         Player player = event.getPlayer();
         loginStatus.replace(player.getUniqueId().toString(), false);
     }
-    
+
     @EventHandler
     public void onBlockBreakEvent(BlockBreakEvent event) {
         try {
@@ -200,14 +320,14 @@ public class Main extends JavaPlugin implements Listener {
                     event.setCancelled(true);
                 }
             } else {
-                // ´¥·¢Õâ¸öÊÂ¼şµÄ£¬Äã²»ÊÇÒ»¸öÈË...
+                // è§¦å‘è¿™ä¸ªäº‹ä»¶çš„ï¼Œä½ ä¸æ˜¯ä¸€ä¸ªäºº...
             }
         } catch (NullPointerException er) {
-            // ¹ö£¡ÓĞÒì³£ÎÒÒ²²»Å×³ö£¬¸øÄã±ï»ØÈ¥£¡
-            // getLogger().info("°¥~µÇÂ¼²å¼ş·¢ÉúÁËÒ»¸ö¿ÕÖ¸ÕëÒì³£´íÎóÄØ~");
+            // æ»šï¼æœ‰å¼‚å¸¸æˆ‘ä¹Ÿä¸æŠ›å‡ºï¼Œç»™ä½ æ†‹å›å»ï¼
+            // getLogger().info("å“~ç™»å½•æ’ä»¶å‘ç”Ÿäº†ä¸€ä¸ªç©ºæŒ‡é’ˆå¼‚å¸¸é”™è¯¯å‘¢~");
         }
     }
-    
+
     @EventHandler
     public void onPlayerInteractEntityEvent(PlayerInteractEntityEvent event) {
         Player player = event.getPlayer();
@@ -216,7 +336,7 @@ public class Main extends JavaPlugin implements Listener {
             event.setCancelled(true);
         }
     }
-    
+
     @EventHandler
     public void onPlayerBedEnterEvent(PlayerBedEnterEvent event) {
         Player player = event.getPlayer();
@@ -225,7 +345,7 @@ public class Main extends JavaPlugin implements Listener {
             event.setCancelled(true);
         }
     }
-    
+
     @EventHandler
     public void onPlayerPickupItemEvent(PlayerPickupItemEvent event) {
         Player player = event.getPlayer();
@@ -233,7 +353,7 @@ public class Main extends JavaPlugin implements Listener {
             event.setCancelled(true);
         }
     }
-    
+
     @EventHandler
     public void onBlockPlaceEvent(BlockPlaceEvent event) {
         Player player = event.getPlayer();
@@ -242,7 +362,7 @@ public class Main extends JavaPlugin implements Listener {
             event.setCancelled(true);
         }
     }
-    
+
     @EventHandler
     public void onPlayerCommandPreprocessEvent(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
@@ -251,7 +371,7 @@ public class Main extends JavaPlugin implements Listener {
             event.setCancelled(true);
         }
     }
-    
+
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
@@ -260,7 +380,7 @@ public class Main extends JavaPlugin implements Listener {
             player.teleport(from);
         }
     }
-    
+
     @EventHandler
     public void onPlayerDropItemEvent(PlayerDropItemEvent event) {
         Player player = event.getPlayer();
@@ -268,11 +388,11 @@ public class Main extends JavaPlugin implements Listener {
             event.setCancelled(true);
         }
     }
-    
+
     public static String color_decode(String Str) {
-        return Str.replaceAll("¡ìa", "").replaceAll("¡ìb", "").replaceAll("¡ìc", "").replaceAll("¡ìd", "").replaceAll("¡ìe", "").replaceAll("¡ìf", "").replaceAll("¡ìl", "").replaceAll("¡ìn", "").replaceAll("¡ìo", "").replaceAll("¡ìr", "").replaceAll("¡ì1", "").replaceAll("¡ì2", "").replaceAll("¡ì3", "").replaceAll("¡ì4", "").replaceAll("¡ì5", "").replaceAll("¡ì6", "").replaceAll("¡ì7", "").replaceAll("¡ì8", "").replaceAll("¡ì9", "").replaceAll("¡ì0", "").replaceAll("¡ìA", "").replaceAll("¡ìB", "").replaceAll("¡ìC", "").replaceAll("¡ìD", "").replaceAll("¡ìE", "").replaceAll("¡ìF", "").replaceAll("¡ìL", "").replaceAll("¡ìN", "").replaceAll("¡ìO", "").replaceAll("¡ìR", "");
+        return Str.replaceAll("Â§a", "").replaceAll("Â§b", "").replaceAll("Â§c", "").replaceAll("Â§d", "").replaceAll("Â§e", "").replaceAll("Â§f", "").replaceAll("Â§l", "").replaceAll("Â§n", "").replaceAll("Â§o", "").replaceAll("Â§r", "").replaceAll("Â§1", "").replaceAll("Â§2", "").replaceAll("Â§3", "").replaceAll("Â§4", "").replaceAll("Â§5", "").replaceAll("Â§6", "").replaceAll("Â§7", "").replaceAll("Â§8", "").replaceAll("Â§9", "").replaceAll("Â§0", "").replaceAll("Â§A", "").replaceAll("Â§B", "").replaceAll("Â§C", "").replaceAll("Â§D", "").replaceAll("Â§E", "").replaceAll("Â§F", "").replaceAll("Â§L", "").replaceAll("Â§N", "").replaceAll("Â§O", "").replaceAll("Â§R", "");
     }
-    
+
     public FileConfiguration load(File file) {
         if (!(file.exists())) {
             try {
@@ -282,15 +402,15 @@ public class Main extends JavaPlugin implements Listener {
         }
         return YamlConfiguration.loadConfiguration(file);
     }
-    
+
     public static String cfgString(String str) {
         try {
-            return pluginConfig.getString(str).replaceAll("&", "¡ì");
+            return pluginConfig.getString(str).replaceAll("&", "Â§");
         } catch (NullPointerException ex) {
             return "";
         }
     }
-    
+
     public static int cfgInt(String str) {
         try {
             return pluginConfig.getInt(str);
@@ -298,7 +418,7 @@ public class Main extends JavaPlugin implements Listener {
             return 0;
         }
     }
-    
+
     public static boolean cfgBoolean(String str) {
         try {
             return pluginConfig.getBoolean(str);

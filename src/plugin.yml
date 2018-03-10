@@ -1,4 +1,11 @@
 name: SakuraLogin
 main: com.moemc.login.Main
-version: 1.0.0
+version: 1.1.8
 author: KasuganoSora
+
+commands:
+  slogin:
+    description: "§6§lSakura §b§lLogin§c§l 管理命令"
+    usage: "§c§l[§6§lSakura §b§lLogin§c§l] §aVer1.1 by §dKasuganoSora §c/ §a查看帮助请输入 §6/slogin §bhelp"
+    permission: "slogin.admin"
+    permission-message: "§c§l[§6§lSakura §b§lLogin§c§l] §c您没有权限使用此命令，执行此命令需要权限 §eslogin.admin"
