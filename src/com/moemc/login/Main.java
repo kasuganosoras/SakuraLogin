@@ -2,8 +2,8 @@ package com.moemc.login;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Map;
 import org.bukkit.Location;
@@ -27,6 +27,11 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.acraft.NicoHttp.Object.Http.Handler;
+import org.acraft.NicoHttp.Event.Exchange;
+import org.acraft.NicoHttp.Object.Http.Server;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 
 /**
  *
@@ -37,16 +42,15 @@ public class Main extends JavaPlugin implements Listener {
     public static Map<String, Boolean> loginStatus = new HashMap<String, Boolean>();
     public static Map<String, String> accountStatus = new HashMap<String, String>();
     public static FileConfiguration pluginConfig;
-    public static String prefix, textColor, loginAPI, apiPass, aesKey;
+    public static String prefix, textColor, loginAPI, apiPass;
     public static int configPort;
     public static Boolean socketStatus = true;
-    public static ServerSocket server;
-    public static String GlobalVersion = "1.1";
+    public static String GlobalVersion = "1.2";
 
     @Override
     public void onEnable() {
-        getLogger().info("§6§lSakura §b§lLogin §eplugin enabled!");
-        getLogger().info("§aAuthor: §dKasuganoSora");
+        getLogger().info("Sakura Login plugin enabled!");
+        getLogger().info("Author: KasuganoSora");
         checkUpdate();
         startSakuraLogin();
     }
@@ -55,63 +59,109 @@ public class Main extends JavaPlugin implements Listener {
         File file = new File(getDataFolder(), "config.yml");
         if (!getDataFolder().exists()) {
             getDataFolder().mkdir();
-            getLogger().info("§ePlugin config folder not exist, trying create it...");
+            getLogger().info("Plugin config folder not exist, trying create it...");
         }
         if (!file.exists()) {
             this.saveDefaultConfig();
-            getLogger().info("§aSuccessful save default config.");
+            getLogger().info("Successful save default config.");
             this.reloadConfig();
-            getLogger().info("§aSuccessful load new config.");
+            getLogger().info("Successful load new config.");
         }
         try {
             pluginConfig = this.load(file);
             getServer().getPluginManager().registerEvents(this, this);
-            getLogger().info("§aEvents register successful!");
-            prefix = pluginConfig.getString("prefix").replaceAll("&", "§");
-            textColor = pluginConfig.getString("color").replaceAll("&", "§");
+            getLogger().info("Events register successful!");
+            prefix = ChatColor.translateAlternateColorCodes('&', pluginConfig.getString("prefix"));
+            textColor = ChatColor.translateAlternateColorCodes('&', pluginConfig.getString("color"));
             configPort = pluginConfig.getInt("port");
             loginAPI = cfgString("apiurl");
             apiPass = cfgString("connectpass");
-            aesKey = cfgString("aeskey");
             // 对旧版本配置文件做兼容
             oldConfig();
-            getLogger().info("§aConfig file load successful.");
+            getLogger().info("Config file load successful.");
         } catch (Exception ex) {
-            getLogger().info("§cAn internal error when load this plugin, error: " + ex.getLocalizedMessage());
+            getLogger().info("An internal error when load this plugin, error: " + ex.getLocalizedMessage());
         }
         if (cfgBoolean("remote")) {
+            socketStatus = true;
             try {
-                new Thread() {
-                    @Override
-                    public void run() {
-                        getLogger().info("§eStarting remote login api...");
-                        getLogger().info("§aSocket bind on port: " + configPort);
-                        try {
-                            int port = configPort;
-                            server = new ServerSocket(port);
-                            getLogger().info("§bSuccessful enable remote login api.");
-                            while (socketStatus) {
-                                Socket socket = server.accept();
-                                new Thread(new SocketServer.Task(socket)).start();
-                            }
-                        } catch (IOException ex) {
-                            if (!ex.getLocalizedMessage().equals("socket closed")) {
-                                getLogger().info("§cAn internal error when enable remote login api, error: " + ex.getLocalizedMessage());
-                            }
-                        }
-                    }
-                }.start();
+                createAuthServer(configPort);
             } catch (Exception er) {
-                getLogger().info("§cFailed to enable remote login api, error: " + er.getLocalizedMessage());
+                getLogger().info("Failed to enable remote login api, error: " + er.getLocalizedMessage());
             }
         } else {
-            getLogger().info("§cRemote login api disabled, now the player only can login in game.");
+            socketStatus = false;
+            getLogger().info("Remote login api disabled, now the player only can login in game.");
         }
+    }
+
+    public void createAuthServer(int dPort) {
+        Server.create(dPort).setHandler(new Handler() {
+            @Override
+            public void onRequest(Exchange event) throws IOException {
+                event.setHeader("Content-Type", "text/html;charset=gb2312");
+                event.setHeader("X-Powered-By", "AkkariinOS10.0");
+                event.setHeader("Server", "AkkariinOS10.0");
+                event.sendHeader(200, 0);
+                try {
+                    if ("".equals(event.getArgs().get("user")) || "".equals(event.getArgs().get("pass"))) {
+                        event.write("Username or password undefined");
+                    } else {
+                        String username = URLEncoder.encode(event.getArgs().get("user"), "UTF-8");
+                        String password = URLEncoder.encode(event.getArgs().get("pass"), "UTF-8");
+                        Player player = Bukkit.getPlayerExact(event.getArgs().get("user"));
+                        if (player == null) {
+                            event.write("Player offline");
+                            return;
+                        }
+                        new Thread() {
+                            @Override
+                            public void run() {
+                                try {
+                                    String returnCode = Http.LoadHTTP(loginAPI + "?token=" + apiPass + "&user=" + username + "&pass=" + password, "");
+                                    switch (returnCode) {
+                                        case "200":
+                                            loginStatus.replace(player.getUniqueId().toString(), true);
+                                            player.sendMessage(prefix + textColor + cfgString("message.login.success"));
+                                            break;
+                                        case "201":
+                                            loginStatus.replace(player.getUniqueId().toString(), true);
+                                            player.sendMessage(prefix + textColor + cfgString("message.register.success"));
+                                            break;
+                                        case "502":
+                                            player.kickPlayer(textColor + cfgString("message.register.error"));
+                                            break;
+                                        case "403":
+                                            player.sendMessage(prefix + textColor + cfgString("message.login.error"));
+                                            player.sendMessage(prefix + textColor + cfgString("message.login.needpass"));
+                                            accountStatus.replace(player.getUniqueId().toString(), accountStatus.get(player.getUniqueId().toString()) + "/");
+                                            break;
+                                        default:
+                                            player.kickPlayer(textColor + cfgString("message.error").replace("%s", returnCode));
+                                    }
+                                } catch (IllegalStateException | NullPointerException ex) {
+                                    // 我也不知道什么鬼问题
+                                }
+                            }
+                        }.start();
+                        event.write("200 OK");
+                    }
+                } catch (Exception ex) {
+                    event.write("SakuraLogin Auth Server");
+                }
+            }
+        });
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (command.getName().equalsIgnoreCase("slogin")) {
+            if (sender instanceof Player) {
+                if (!Bukkit.getPlayer(sender.getName()).hasPermission("slogin.admin")) {
+                    sender.sendMessage("Permission denied");
+                    return true;
+                }
+            }
             try {
                 switch (args[0].toLowerCase()) {
                     case "reload":
@@ -120,17 +170,11 @@ public class Main extends JavaPlugin implements Listener {
                     case "help":
                         pluginHelp(sender);
                         break;
-                    case "stopsocket":
-                        disableSocket();
-                        break;
-                    case "startsocket":
-                        startSocket();
-                        break;
                     default:
                         pluginHelp(sender);
                 }
             } catch (Exception ex) {
-                pluginHelp(sender);
+                sender.sendMessage("Unknown command");
             }
             return true;
         }
@@ -138,80 +182,29 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     public void oldConfig() {
-        if (cfgString("aeskey").equals("")) {
-            try {
-                pluginConfig.set("aeskey", "KASUGANOSORASAES");
-                pluginConfig.save(new File(getDataFolder(), "config.yml"));
-                aesKey = "KASUGANOSORASAES";
-            } catch (IOException ex) {
-                getLogger().info(ex.getLocalizedMessage());
-            }
+        if (!cfgString("version").equals(GlobalVersion)) {
+            // 暂时无需改动
         }
     }
 
     public void reloadloginConfig() {
-        try {
-            socketStatus = false;
-            server.close();
-            startSakuraLogin();
-        } catch (IOException ex) {
-            getLogger().info("§cAn internal error when close socket: " + ex.getLocalizedMessage());
-        }
-    }
-
-    public void disableSocket() {
-        try {
-            socketStatus = false;
-            pluginConfig.set("remote", false);
-            pluginConfig.save(new File(getDataFolder(), "config.yml"));
-            server.close();
-            getLogger().info("§bSuccessful disable remote login api.");
-        } catch (IOException ex) {
-            // getLogger().info("§cAn internal error when close socket: " + ex.getLocalizedMessage());
-        }
-    }
-
-    public void startSocket() {
-        try {
-            pluginConfig.set("remote", true);
-            pluginConfig.save(new File(getDataFolder(), "config.yml"));
-            new Thread() {
-                @Override
-                public void run() {
-                    getLogger().info("§eStarting remote login api...");
-                    getLogger().info("§aSocket bind on port: " + configPort);
-                    try {
-                        int port = configPort;
-                        server = new ServerSocket(port);
-                        getLogger().info("§bSuccessful enable remote login api.");
-                        while (socketStatus) {
-                            Socket socket = server.accept();
-                            new Thread(new SocketServer.Task(socket)).start();
-                        }
-                    } catch (IOException ex) {
-                        getLogger().info("§cAn internal error when enable remote login api, error: " + ex.getLocalizedMessage());
-                    }
-                }
-            }.start();
-        } catch (Exception er) {
-            getLogger().info("§cFailed to start remote login api, error: " + er.getLocalizedMessage());
-        }
+        this.reloadConfig();
+        startSakuraLogin();
     }
 
     public void pluginHelp(CommandSender sender) {
-        sender.sendMessage("§6§lSakura §b§lLogin §a§l1.1 §e§lby §d§lKasuganoSora");
-        sender.sendMessage(prefix + textColor + "/slogin help         Show this help.");
-        sender.sendMessage(prefix + textColor + "/slogin reload       Reload config.");
-        sender.sendMessage(prefix + textColor + "/slogin stopsocket   Disable remote login.");
-        sender.sendMessage(prefix + textColor + "/slogin startsocket  Enable remote login.");
+        sender.sendMessage("§6§lSakura §b§lLogin §a§l" + GlobalVersion + " §e§lby §d§lKasuganoSora");
+        sender.sendMessage(prefix + textColor + "/slogin help         显示此帮助信息");
+        sender.sendMessage(prefix + textColor + "/slogin reload       重新载入插件配置文件");
+        sender.sendMessage(prefix + textColor + "感谢您使用 Sakura Login 插件！");
     }
-    
+
     public void checkUpdate() {
         new Thread() {
             @Override
             public void run() {
-                String result = Http.LoadHTTP("https://panel.tcotp.cn/cdn/SakuraLogin/update.php?version=1.1", "");
-                if(result.equals(GlobalVersion)) {
+                String result = Http.LoadHTTP("https://panel.tcotp.cn/cdn/SakuraLogin/update.php?version=" + GlobalVersion, "");
+                if (result.equals(GlobalVersion)) {
                     getLogger().info("§6§lSakura §b§lLogin §a§l" + GlobalVersion + " §e§lis the newest version.");
                 } else {
                     getLogger().info("§6§lSakura §b§lLogin §a§lfound new version: " + result);
@@ -222,11 +215,11 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
+    public void onPlayerJoin(PlayerJoinEvent event) throws UnsupportedEncodingException {
         Player player = event.getPlayer();
         loginStatus.put(player.getUniqueId().toString(), false);
         accountStatus.put(player.getUniqueId().toString(), "");
-        String nameWithoutColorCode = color_decode(player.getName());
+        String nameWithoutColorCode = URLEncoder.encode(color_decode(player.getName()), "UTF-8");
         String returnCode = Http.LoadHTTP(loginAPI + "?token=" + apiPass + "&user=" + nameWithoutColorCode, "");
         switch (returnCode) {
             case "200":
@@ -251,7 +244,7 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     @EventHandler
-    public void onPlayerChatEvent(PlayerChatEvent event) {
+    public void onPlayerChatEvent(PlayerChatEvent event) throws UnsupportedEncodingException {
         Player player = event.getPlayer();
         if (loginStatus.get(player.getUniqueId().toString()) == false) {
             if ("/////".equals(accountStatus.get(player.getUniqueId().toString()))) {
@@ -260,13 +253,14 @@ public class Main extends JavaPlugin implements Listener {
                 return;
             }
             player.sendMessage(prefix + textColor + cfgString("message.logging"));
-            String Password = event.getMessage();
-            String nameWithoutColorCode = color_decode(player.getName());
+            String Password = URLEncoder.encode(event.getMessage(), "UTF-8");
+            String nameWithoutColorCode = URLEncoder.encode(color_decode(player.getName()), "UTF-8");
             event.setCancelled(true);
             new Thread() {
                 @Override
                 public void run() {
                     try {
+                        getLogger().info("DEBUG: " + loginAPI + "?token=" + apiPass + "&user=" + nameWithoutColorCode + "&pass=" + Password);
                         String returnCode = Http.LoadHTTP(loginAPI + "?token=" + apiPass + "&user=" + nameWithoutColorCode + "&pass=" + Password, "");
                         switch (returnCode) {
                             case "200":
@@ -278,7 +272,7 @@ public class Main extends JavaPlugin implements Listener {
                                 player.sendMessage(prefix + textColor + cfgString("message.register.success"));
                                 break;
                             case "502":
-                                player.kickPlayer(textColor + cfgString("message.register.error"));
+                                player.sendMessage(textColor + cfgString("message.register.error"));
                                 break;
                             case "403":
                                 player.sendMessage(prefix + textColor + cfgString("message.login.error"));
@@ -286,7 +280,7 @@ public class Main extends JavaPlugin implements Listener {
                                 accountStatus.replace(player.getUniqueId().toString(), accountStatus.get(player.getUniqueId().toString()) + "/");
                                 break;
                             default:
-                                player.kickPlayer(textColor + cfgString("message.error").replace("%s", returnCode));
+                                player.sendMessage(textColor + cfgString("message.error").replace("%s", returnCode));
                         }
                     } catch (IllegalStateException | NullPointerException ex) {
                         // 我也不知道什么鬼问题
@@ -405,7 +399,7 @@ public class Main extends JavaPlugin implements Listener {
 
     public static String cfgString(String str) {
         try {
-            return pluginConfig.getString(str).replaceAll("&", "§");
+            return ChatColor.translateAlternateColorCodes('&', pluginConfig.getString(str));
         } catch (NullPointerException ex) {
             return "";
         }

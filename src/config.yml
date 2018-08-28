@@ -1,8 +1,9 @@
 #
-#  SoraLogin 登录插件 v1.1
-#
+#  SoraLogin 登录插件 v1.2
 #  Powered by KasuganoSora
 #
+# 版本标识，请勿修改
+version: 1.2
 
 # Prefix 游戏内显示前缀
 prefix: "&c&l[&6&lKasugano &b&lSora&c&l] &r"
@@ -24,9 +25,6 @@ remote: true
 
 # Port 外置登录 Socket 服务器端口
 port: 6666
-
-# AES 加密密钥，长度必须必须为 16 个字符！！
-aeskey: "KASUGANOSORASAES"
 
 # Message 语言消息设置
 message:
@@ -50,3 +48,4 @@ message:
     launcher:
         error: "您未通过官方启动器启动游戏。"
     error: "服务器发生内部错误：%s"
+    

@@ -1,4 +1,4 @@
-﻿package com.moemc.login;
+package com.moemc.login;
 
 import java.security.Key; 
 import javax.crypto.Cipher; 
